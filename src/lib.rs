@@ -1,6 +1,9 @@
+extern crate kernel32;
+extern crate winapi;
+
 use winapi::{FILE_MAP_ALL_ACCESS, c_char};
 use kernel32::{OpenFileMappingW, MapViewOfFile, UnmapViewOfFile, CloseHandle};
-use std::ffi::OsStr;
+use std::ffi::{CStr, OsStr};
 use std::os::windows::ffi::OsStrExt;
 
 mod mem;
@@ -27,7 +30,7 @@ fn encode_wide(s: &str) -> Vec<u16> {
     chars
 }
 
-pub fn print(text: &str) {
+pub fn _print(text: &str) {
     unsafe {
         let mut text = text.as_bytes().iter().map(|&c| c as c_char).collect::<Vec<_>>();
         text.push(0);
@@ -79,4 +82,17 @@ pub fn print(text: &str) {
         UnmapViewOfFile(map_addr);
         CloseHandle(map_file);
     }
+}
+
+unsafe fn str(s: *const c_char) -> &'static str {
+    if s.is_null() {
+        ""
+    } else {
+        CStr::from_ptr(s as _).to_str().unwrap()
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn print(s: *const c_char) {
+    _print(str(s))
 }
