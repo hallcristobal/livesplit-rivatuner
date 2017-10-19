@@ -30,9 +30,12 @@ fn encode_wide(s: &str) -> Vec<u16> {
     chars
 }
 
-pub fn _print(text: &str) {
+pub fn _print(text: &str) -> bool {
     unsafe {
-        let mut text = text.as_bytes().iter().map(|&c| c as c_char).collect::<Vec<_>>();
+        let mut text = text.as_bytes()
+            .iter()
+            .map(|&c| c as c_char)
+            .collect::<Vec<_>>();
         text.push(0);
 
         let name = encode_wide("RTSSSharedMemoryV2");
@@ -41,23 +44,34 @@ pub fn _print(text: &str) {
 
         let map_file = OpenFileMappingW(FILE_MAP_ALL_ACCESS, false as _, name.as_ptr());
 
-        assert!(!map_file.is_null());
+        if map_file.is_null() {
+            return false;
+        }
 
         let map_addr = MapViewOfFile(map_file, FILE_MAP_ALL_ACCESS, 0, 0, 0);
 
-        assert!(!map_addr.is_null());
+        if map_addr.is_null() {
+            return false;
+        }
 
         let mem = &mut *(map_addr as *mut mem::SharedMemory);
 
-        assert_eq!(mem.signature, 0x52545353);
-        assert!(mem.version >= 0x00020000);
+        if mem.signature != 0x52545353 {
+            return false;
+        }
+
+        if mem.version < 0x00020000 {
+            return false;
+        }
 
         'text: for pass in 0..2 {
             for entry in 1..mem.osd_arr_size {
-                let entry = &mut *((mem as *mut mem::SharedMemory as *mut u8)
-                    .offset(mem.osd_arr_offset as isize +
-                            entry as isize * mem.osd_entry_size as isize) as
-                                   *mut mem::OsdEntry);
+                let entry = &mut *((mem as *mut mem::SharedMemory as *mut u8).offset(
+                    mem.osd_arr_offset as isize +
+                        entry as isize *
+                            mem.osd_entry_size as
+                                isize,
+                ) as *mut mem::OsdEntry);
 
                 if pass > 0 {
                     if strlen(&entry.osd_owner) == 0 {
@@ -81,6 +95,7 @@ pub fn _print(text: &str) {
 
         UnmapViewOfFile(map_addr);
         CloseHandle(map_file);
+        true
     }
 }
 
@@ -93,6 +108,6 @@ unsafe fn str(s: *const c_char) -> &'static str {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn print(s: *const c_char) {
+pub unsafe extern "C" fn print(s: *const c_char) -> bool {
     _print(str(s))
 }
